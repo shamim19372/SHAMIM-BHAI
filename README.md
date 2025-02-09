@@ -70,10 +70,10 @@ To prevent abuse and ensure security, Kokoro requires **Google reCAPTCHA**. You 
 Replace `"sitekey"` with your own:  
 ```json
 {
-  "author": "Kenneth Panio",
+  "author": "Kenneth Panio", // Warning: Do not Change! instant regret if you do it : (
   "sitekey": "YOUR_GOOGLE_RECAPTCHA_SITE_KEY",
   "weblink": "https://yourwebsite.com or https:///127.0.0.1",
-  "port": "Add if you hosted server on Direct-IP Website or Localhost e.g 8080",
+  "port": "Add if you hosted server on Public-IP Website or Localhost e.g 8080",
   "timezone": "Asia/Manila"
 }
 ```
