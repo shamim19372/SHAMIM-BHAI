@@ -37,7 +37,7 @@ Violations of this code will be handled with appropriate action, including warni
 
 If you witness or experience unacceptable behavior, please report it to the maintainers via:  
 📧 **Email**: [lkpanio25@gmail.com](mailto:lkpanio25@gmail.com)  
-🔗 **GitHub Issues**: [Open a confidential report](https://github.com/haji-mix/kokoro/issues)  
+🔗 **GitHub Issues**: [Open a confidential report](https://github.com/haji-mix/fb-bot/issues)  
 
 We take all reports seriously and will respond promptly.  
 

@@ -31,8 +31,8 @@ Kokoro-Project is a **forked and enhanced** version of the original **Facebook A
 
 ### **1️⃣ Clone the Repository**  
 ```bash
-git clone https://github.com/haji-mix/kokoro
-cd kokoro
+git clone https://github.com/haji-mix/fb-bot
+cd fb-bot
 ```
 
 ### **2️⃣ Install Dependencies**  
