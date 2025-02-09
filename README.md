@@ -20,6 +20,7 @@ Kokoro-Project is a **forked and enhanced** version of the original **Facebook A
 
 ## **📸 Screenshots**  
 
+![Demo Site](https://i.imgur.com/R47dOhv.jpeg)  
 ![Chatbot Interaction](https://i.imgur.com/ciw2pfH.jpeg)  
 ![Bot Commands](https://i.imgur.com/nNXMoSd.jpeg)  
 ![Admin Panel](https://i.imgur.com/4fCYUJr.jpeg)  
@@ -43,6 +44,7 @@ npm install
 
 #### **📌 .env Configuration**  
 ```bash
+# YOU CAN SKIP ALL OF THESE ITS OPTIONAL!
 # Optional login methods
 APPSTATE='YOUR C3C COOKIE JSON'  
 EMAIL='YOUR FACEBOOK EMAIL'  
