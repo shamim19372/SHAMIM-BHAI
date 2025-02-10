@@ -1,14 +1,22 @@
 const path = require("path");
 const fs = require("fs");
+
 const scriptDir = path.join(__dirname, "../script");
 const allowedExtensions = [".js", ".ts"];
 const loadedModuleNames = new Set();
 let autoDelete = true; // Set to `false` to disable auto-delete
 
+// Utility function to clear module cache
+function clearModuleCache(modulePath) {
+    delete require.cache[require.resolve(modulePath)];
+}
+
 async function loadModule(modulePath, Utils, logger, count) {
     try {
+        // Prevent caching issues
+        clearModuleCache(modulePath);
         const module = require(modulePath);
-        const config = module.config || module.meta;
+        const config = module.config || module.meta || module.manifest;
 
         if (!config) {
             logger.red(`Module at ${modulePath} does not have a "config" or "meta" property. Skipping...`);
@@ -40,10 +48,10 @@ async function loadModule(modulePath, Utils, logger, count) {
 
         loadedModuleNames.add(moduleName);
 
+        // Normalize module configuration
         const moduleInfo = {
             ...Object.fromEntries(Object.entries(config).map(([key, value]) => [key?.toLowerCase(), value])),
-            aliases: [...config.aliases || [],
-                moduleName],
+            aliases: [...(config.aliases || []), moduleName],
             name: moduleName,
             role: config.role ?? "0",
             version: config.version ?? "1.0.0",
@@ -60,50 +68,54 @@ async function loadModule(modulePath, Utils, logger, count) {
             info: config.info ?? config.description ?? ""
         };
 
-
+        // Store different handlers efficiently
         if (module.handleEvent) {
-            Utils.handleEvent.set(moduleInfo.aliases, {
-                ...moduleInfo, handleEvent: module.handleEvent
-            });
+            Utils.handleEvent.set(moduleInfo.aliases, { ...moduleInfo, handleEvent: module.handleEvent });
         }
-        if (module.handleReply) {
-            Utils.ObjectReply.set(moduleInfo.aliases, {
-                ...moduleInfo, handleReply: module.handleReply
-            });
+
+        const replyFunction = module.handleReply || module.onReply;
+        if (replyFunction) {
+            Utils.ObjectReply.set(moduleInfo.aliases, { ...moduleInfo, handleReply: replyFunction });
         }
-        if (module.run) {
-            Utils.commands.set(moduleInfo.aliases, {
-                ...moduleInfo, run: module.run
-            });
+
+        const executeFunction = module.run || module.deploy || module.execute || module.exec || module.onStart;
+        if (executeFunction) {
+            Utils.commands.set(moduleInfo.aliases, { ...moduleInfo, run: executeFunction });
         }
 
         logger.rainbow(`LOADED MODULE [${moduleName}]`);
-        count++;
+        return count + 1;
     } catch (error) {
         logger.red(`Error loading module at ${modulePath}: ${error.stack}`);
+        return count;
     }
-    return count;
 }
 
 async function loadFromDirectory(directory, Utils, logger, count) {
-    const files = fs.readdirSync(directory);
-    for (const file of files) {
-        const filePath = path.join(directory, file);
-        const stats = fs.statSync(filePath);
+    try {
+        const files = fs.readdirSync(directory);
+        const modulePromises = files.map(async (file) => {
+            const filePath = path.join(directory, file);
+            const stats = fs.statSync(filePath);
 
-        if (stats.isDirectory()) {
-            count = await loadFromDirectory(filePath, Utils, logger, count);
-        } else if (allowedExtensions.includes(path.extname(filePath).toLowerCase())) {
-            count = await loadModule(filePath, Utils, logger, count);
-        }
+            if (stats.isDirectory()) {
+                return loadFromDirectory(filePath, Utils, logger, count);
+            } else if (allowedExtensions.includes(path.extname(filePath).toLowerCase())) {
+                return loadModule(filePath, Utils, logger, count);
+            }
+        });
+
+        const results = await Promise.all(modulePromises);
+        return results.reduce((sum, value) => sum + (value || 0), count);
+    } catch (error) {
+        logger.red(`Error reading directory: ${directory}. Error: ${error.message}`);
+        return count;
     }
-
-    return count;
 }
 
 async function loadModules(Utils, logger) {
     let count = await loadFromDirectory(scriptDir, Utils, logger, 0);
-    logger.rainbow(`TOTAL MODULES: [${count}]`);
+    logger.rainbow(`TOTAL MODULES LOADED: [${count}]`);
 }
 
 module.exports = {
