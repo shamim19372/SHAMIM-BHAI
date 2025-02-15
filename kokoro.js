@@ -44,31 +44,130 @@ const Utils = {
 
 loadModules(Utils, logger);
 
-const blockedIPs = new Set();
-
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'public', 'views'));
 
-const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 1000,
-    handler: (req, res) => {
-        if (!trustedIPs.includes(req.ip)) {
-            blockedIPs.add(req.ip);
-            return res.render('403');
+const blockedIPs = new Map();
+const TRUSTED_IPS = ['127.0.0.1'];
+let server;
+let underAttack = false;
+
+const isBlocked = (ip) => blockedIPs.has(ip);
+
+const startServer = async (stealth_port) => {
+    try {
+        const hajime = await workers();
+
+        // Reload environment variables
+        require('dotenv').config();
+
+        let PORT = stealth_port || process.env.PORT || kokoro_config.port || hajime?.host?.port || 10000;
+        const lastTimestamp = process.env.PORT_TIMESTAMP ? parseInt(process.env.PORT_TIMESTAMP) : 0;
+        const currentTime = Date.now();
+
+        // Check if more than 1 hour has passed
+        if (lastTimestamp && currentTime - lastTimestamp > 60 * 60 * 1000) {
+            console.log("More than 1 hour passed, removing stored port.");
+            removeEnvPort();
+            PORT = kokoro_config.port || hajime?.host?.port || 10000; // Fallback to default
         }
-        res.status(429).send('Too Many Requests');
-    },
-});
+
+        const serverUrl =
+            (kokoro_config.weblink && kokoro_config.port ? `${kokoro_config.weblink}:${kokoro_config.port}` : null) ||
+            kokoro_config.weblink ||
+            (hajime?.host?.server?.[0] && hajime?.host?.port ? `${hajime.host.server[0]}:${hajime.host.port}` : null) ||
+            hajime?.host?.server?.[0] ||
+            `http://localhost:${PORT}`;
+
+        server = app.listen(PORT, () => {
+            logger.instagram(`PUBLIC WEB: ${serverUrl}\nLOCAL WEB: http://127.0.0.1:${PORT}`);
+        });
+
+    } catch (error) {
+        console.error("Error starting server:", error);
+    }
+};
+
+
+function updateEnvPort(newPort) {
+    const envPath = ".env";
+    if (!fs.existsSync(envPath)) {
+        fs.writeFileSync(envPath, "", "utf8");
+    }
+
+    let envContent = fs.readFileSync(envPath, "utf8");
+
+    const timestamp = Date.now(); // Store current timestamp
+
+    // Replace or add PORT and TIMESTAMP
+    envContent = envContent.replace(/^PORT=\d+/m, `PORT=${newPort}`);
+    envContent = envContent.replace(/^PORT_TIMESTAMP=\d+/m, `PORT_TIMESTAMP=${timestamp}`);
+
+    if (!/^PORT=\d+/m.test(envContent)) envContent += `\nPORT=${newPort}`;
+    if (!/^PORT_TIMESTAMP=\d+/m.test(envContent)) envContent += `\nPORT_TIMESTAMP=${timestamp}`;
+
+    fs.writeFileSync(envPath, envContent, "utf8");
+    console.log(`Updated .env with PORT=${newPort}, TIMESTAMP=${timestamp}`);
+}
+
+
+function removeEnvPort() {
+    const envPath = ".env";
+    if (!fs.existsSync(envPath)) return;
+
+    let envContent = fs.readFileSync(envPath, "utf8");
+
+    // Remove PORT and PORT_TIMESTAMP
+    envContent = envContent.replace(/^PORT=\d+\n?/m, "");
+    envContent = envContent.replace(/^PORT_TIMESTAMP=\d+\n?/m, "");
+
+    fs.writeFileSync(envPath, envContent, "utf8");
+    console.log("Removed stored PORT and TIMESTAMP from .env");
+}
+
+function switchPort() {
+    if (underAttack) return;
+    underAttack = true;
+
+    const newPort = Math.floor(Math.random() * (9000 - 4000) + 4000);
+    console.log(`Switching to port ${newPort}`);
+
+    if (server) {
+        server.close(() => {
+            console.log(`Closed old port`);
+            updateEnvPort(newPort);
+            startServer(newPort);
+            underAttack = false;
+        });
+    }
+}
+
 
 app.use((req, res, next) => {
-    if (blockedIPs.has(req.ip)) {
-        return res.render('403');
+    const clientIP = req.headers["cf-connecting-ip"] || req.ip;
+    if (isBlocked(clientIP)) {
+        switchPort();
+        return res.redirect("https://chatgpt.com/");
     }
     next();
 });
 
-const trustedIPs = ['::1', '127.0.0.1'];
+const limiter = rateLimit({
+    windowMs: 5 * 60 * 1000,
+    max: 500,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (req, res) => {
+        const clientIP = req.headers["cf-connecting-ip"] || req.ip;
+        
+        if (!TRUSTED_IPS.includes(clientIP)) {
+            console.log(`DDoS detected from ${clientIP}! Blocking IP and switching ports...`);
+            blockedIPs.set(clientIP, Date.now());
+            switchPort();
+            return res.redirect("https://chatgpt.com/");
+        }
+    },
+});
 
 app.use(cors({
     origin: "*"
@@ -78,13 +177,13 @@ app.use(helmet({
     contentSecurityPolicy: false
 }));
 
-
-app.use(limiter);
-
 app.use((req, res, next) => {
     res.setHeader('x-powered-by', 'Kokoro AI');
     next();
 });
+
+
+app.use(limiter); // Apply rate limiting globally
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
@@ -343,31 +442,14 @@ async function postLogin(req, res) {
     }
 }
 
-const startServer = async () => {
-    try {
-        const hajime = await workers();
-        
-        let PORT = process.env.PORT || kokoro_config.port || hajime?.host?.port || 10000;
-
-        const server = 
-            (kokoro_config.weblink && kokoro_config.port ? `${kokoro_config.weblink}:${kokoro_config.port}` : null) ||
-            kokoro_config.weblink ||
-            (hajime?.host?.server?.[0] && hajime?.host?.port ? `${hajime.host.server[0]}:${hajime.host.port}` : null) ||
-            hajime?.host?.server?.[0] ||
-            `http://localhost:${PORT}`;
-
-        app.listen(PORT, () => {
-            logger.summer(`Web Link: ${server}`);
-        });
-
-    } catch (error) {
-        console.error("Error starting server:", error);
-    }
-};
+function changePort() {
+    server.close(() => {
+        const stealth_port = Math.floor(Math.random() * (60000 - 4000) + 4000); // Random port
+        startServer(stealth_port);
+    });
+}
 
 startServer();
-
-
 
 async function accountLogin(state, prefix, admin = [], email, password) {
     const global = await workers();
@@ -482,6 +564,7 @@ async function accountLogin(state, prefix, admin = [], email, password) {
 
             try {
                 var listenEmitter = api.listenMqtt(async (error, event) => {
+                    if (!event) return;
                     if (error) {
                         if (error === 'Connection closed.') {
                             logger.red(`Error during API listen: ${error}`, userid);
@@ -493,14 +576,15 @@ async function accountLogin(state, prefix, admin = [], email, password) {
                     kokoro_config = JSON.parse(fs.readFileSync('./kokoro.json', 'utf-8'));
                     chat.testCo(kokoro_config.author, 2);
 
-                    if (event && event.senderID && event.body) {
-                        const idType = event.isGroup ? "ThreadID": "UserID";
-                        const idValue = event.isGroup ? event.threadID: event.senderID;
+if (event && event.senderID && event?.body) {
+    const isGroup = event.isGroup || event.threadID !== event.senderID;
+    const idType = isGroup ? "GroupID" : "Private Chat";
+    const idValue = isGroup ? event.threadID : event.senderID;
 
-                        logger.instagram(fonts.origin(`${idType}: ${idValue}\nMessage: ${(event.body || "").trim()}`));
-                    }
+    let logMessage = `${idType}: ${idValue}\nSenderID: ${event.senderID}\nMessage: ${(event?.body || "").trim()}`;
 
-
+    logger.instagram(fonts.origin(logMessage));
+}
 
                     const reply = async (msg) => {
                         const msgInfo = await chat.reply(fonts.thin(msg));
@@ -510,9 +594,9 @@ async function accountLogin(state, prefix, admin = [], email, password) {
                     const SPAM_THRESHOLD = 6;
                     const TIME_WINDOW = 10 * 1000;
 
-                    if (event && event.body && event.senderID) {
+                    if (event && event?.body && event.senderID) {
                         const userId = event.senderID;
-                        const message = (event.body || "").trim();
+                        const message = (event?.body || "").trim();
                         const currentTime = Date.now();
 
                         if (!Utils.userActivity[userId]) {
@@ -572,22 +656,23 @@ async function accountLogin(state, prefix, admin = [], email, password) {
                     } else {
                         history = {};
                     }
-
-                    let isPrefix =
-                    event.body &&
+                    
+                    
+                   let isPrefix =
+                    event?.body &&
                     aliases(
-                        (event.body || "").trim().toLowerCase()
+                        (event?.body || "").trim().toLowerCase()
                         .split(/ +/)
                         .shift()
                     )?.isPrefix == false
                     ? "": prefix;
 
                     let [command,
-                        ...args] = (event.body || "")
+                        ...args] = (event?.body || "")
                     .trim()
                     .toLowerCase()
                     .startsWith(isPrefix?.toLowerCase())
-                    ? (event.body || "")
+                    ? (event?.body || "")
                     .trim()
                     .substring(isPrefix?.length)
                     .trim()
@@ -605,11 +690,11 @@ async function accountLogin(state, prefix, admin = [], email, password) {
 
                     if (
                         event &&
-                        event.body &&
+                        event?.body &&
                         (
                             (command && command.toLowerCase && aliases(command.toLowerCase())?.name) ||
-                            (event.body.startsWith(prefix) && aliases(command?.toLowerCase())?.name) ||
-                            event.body.startsWith(prefix)
+                            (event?.body.startsWith(prefix) && aliases(command?.toLowerCase())?.name) ||
+                            event?.body.startsWith(prefix?.toLowerCase())
                         )
                     ) {
                         const role = aliases(command)?.role ?? 0;
@@ -722,7 +807,7 @@ async function accountLogin(state, prefix, admin = [], email, password) {
                         }
                     }
 
-if (event && event.body && aliases(command)?.name) {
+if (event && event?.body && aliases(command)?.name) {
     const now = Date.now();
     const name = aliases(command)?.name;
     const cooldownKey = `${event.senderID}_${name}_${userid}`;
@@ -756,23 +841,23 @@ if (event && event.body && aliases(command)?.name) {
                         }
                     }
 
-                    if (event && event.body &&
+                    if (event && event?.body &&
                         !command &&
-                        event.body
+                        event?.body
                         ?.toLowerCase()
-                        .startsWith(prefix.toLowerCase())) {
+                        .startsWith(prefix?.toLowerCase())) {
                         await reply(
                             `Invalid command please use help to see the list of available commands.`
                         );
                         return;
                     }
 
-                    if (event && event.body &&
+                    if (event && event?.body &&
                         command &&
                         prefix &&
-                        event.body
+                        event?.body
                         ?.toLowerCase()
-                        .startsWith(prefix.toLowerCase()) &&
+                        .startsWith(prefix?.toLowerCase()) &&
                         !aliases(command)?.name) {
                         await reply(
                             `Invalid command '${command}' please use ${prefix}help to see the list of available commands.`
@@ -968,28 +1053,34 @@ if (event && event.body && aliases(command)?.name) {
             fs.existsSync("./data") && fs.existsSync("./data/config.json")
             ? JSON.parse(fs.readFileSync("./data/config.json", "utf8")): createConfig();
 
-            const checkHistory = async () => {
-                const history = JSON.parse(fs.readFileSync("./data/history.json", "utf-8"));
 
-                for (let i = 0; i < history.length; i++) {
-                    const user = history[i];
-                    if (!user || typeof user !== "object") process.exit(0);
+const checkHistory = async () => {
+    try {
+        let history = JSON.parse(fs.readFileSync("./data/history.json", "utf-8"));
 
-                    if (user.time === undefined || user.time === null || isNaN(user.time)) {
-                        process.exit(0);
-                    }
+        history = history.filter(user => {
+            if (!user || typeof user !== "object") return false; // Remove non-objects
+            if (user.time === undefined || user.time === null || isNaN(user.time)) return false; 
+            return true;
+        });
 
-                    const update = Utils.account.get(user.userid);
-                    if (update) {
-                        user.time = update.time;
-                    }
-                }
+        for (let user of history) {
+            const update = Utils.account.get(user.userid);
+            if (update) {
+                user.time = update.time;
+            }
+        }
 
-                await empty.emptyDir(cacheFile);
-                fs.writeFileSync("./data/history.json", JSON.stringify(history, null, 2));
-            };
+        await empty.emptyDir(cacheFile);
 
-            setInterval(checkHistory, 15 * 60 * 1000);
+        fs.writeFileSync("./data/history.json", JSON.stringify(history, null, 2));
+    } catch (error) {
+        console.error("Error checking history:", error);
+    }
+};
+
+setInterval(checkHistory, 15 * 60 * 1000);
+
             try {
                 const files = fs.readdirSync(sessionFolder);
 
