@@ -312,20 +312,56 @@ routes.forEach(route => {
     }
 });
 
+    const scriptsPath = path.join(__dirname, 'script', 'restapi');
+
+    if (!fs.existsSync(scriptsPath)) {
+      console.error(`Directory not found: ${scriptsPath}`);
+      return;
+    }
+
+    fs.readdirSync(scriptsPath).forEach(file => {
+        const script = require(path.join(scriptsPath, file));
+
+        if (script.config && script.config.name) {
+          app.get(`/api/v2/${script.config.name}`, (req, res) => {
+              script.initialize({ req, res });
+          });
+
+          if (script.config.aliases && script.config.aliases.length > 0) {
+            script.config.aliases.forEach(alias => {
+              app.get(`/api/v2/${alias}`, (req, res) => {
+                  script.initialize({ req, res, hajime });
+              });
+            });
+          }
+        }
+    });
+
+
 app.get('/script/*', (req, res) => {
     const filePath = path.join(__dirname, 'script', req.params[0] || '');
     const normalizedPath = path.normalize(filePath);
+
     if (!normalizedPath.startsWith(path.join(__dirname, 'script'))) {
-        return res.render('403', {
-            cssFiles, jsFiles
-        });
+        return res.status(403).render('403', { cssFiles, jsFiles });
     }
 
     fs.readFile(filePath, 'utf8', (err, data) => {
         if (err) {
-            return res.render('404', {
-                cssFiles, jsFiles
-            });
+            return res.status(404).render('404',
+        {
+            cssFiles,
+            jsFiles
+        },
+        (err,
+            renderedHtml) => {
+            if (err) {
+                res.status(500).send('Error rendering template');
+                return;
+            }
+
+            res.send(minifyHtml(renderedHtml));
+        });
         }
 
         if (req.query.raw === 'true') {
@@ -340,9 +376,8 @@ app.get('/script/*', (req, res) => {
 });
 
 
-
 app.use((req, res) => {
-    res.render('404',
+    res.status(404).render('404',
         {
             cssFiles,
             jsFiles
