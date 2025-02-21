@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const login = require("chatbox-fca-remake");
+const login = require("./chatbox-fca-remake/package/index");
 const express = require("express");
 const rateLimit = require('express-rate-limit');
 const app = express();
@@ -947,6 +947,7 @@ if (event && event?.body && aliases(command)?.name) {
                                                         ),
                                                         1
                                                     )): null;
+                                                    
                                                 await (
                                                     aliases(command?.toLowerCase())?.run ||
                                                     (() => {})
