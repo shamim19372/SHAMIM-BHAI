@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const login = require("chatbox-fca-remake");
+const login = require("./chatbox-fca-remake/package/index");
 const express = require("express");
 const rateLimit = require('express-rate-limit');
 const app = express();
@@ -486,7 +486,7 @@ function changePort() {
 
 startServer();
 
-async function accountLogin(state, prefix, admin = [], email, password) {
+async function accountLogin(state, prefix = "", admin = [], email, password) {
     const global = await workers();
 
     return new Promise((resolve, reject) => {
@@ -569,12 +569,14 @@ async function accountLogin(state, prefix, admin = [], email, password) {
             }
 
             const cronjob = require('./system/cronjob')({
+                logger,
                 api,
                 fonts,
                 font: fonts,
             });
 
             const notevent = require('./system/notevent')({
+                logger,
                 api,
                 fonts,
                 font: fonts,
@@ -740,7 +742,7 @@ if (event && event.senderID && event?.body) {
                             event.senderID
                         );
 
-                        const bot_owner = (Array.isArray(admin) && admin.includes(event.senderID)) || super_admin;
+                        const bot_owner = ((admin ?? []).includes(event.senderID)) || super_admin;
 
 
                         const threadInfo = await chat.threadInfo(event.threadID);
@@ -906,6 +908,7 @@ if (event && event?.body && aliases(command)?.name) {
                     } of Utils.handleEvent.values()) {
                         if (handleEvent && name) {
                             handleEvent({
+                                logger,
                                 api,
                                 chat,
                                 message: chat,
@@ -952,6 +955,7 @@ if (event && event?.body && aliases(command)?.name) {
                                                     aliases(command?.toLowerCase())?.run ||
                                                     (() => {})
                                                 )({
+                                                        logger,
                                                         api,
                                                         event,
                                                         args,
@@ -983,6 +987,7 @@ if (event && event?.body && aliases(command)?.name) {
                                                     );
                                                     if (indexOfHandle !== -1) return;
                                                     await handleReply({
+                                                        logger,
                                                         api,
                                                         event,
                                                         args,
@@ -1089,14 +1094,15 @@ if (event && event?.body && aliases(command)?.name) {
             fs.existsSync("./data") && fs.existsSync("./data/config.json")
             ? JSON.parse(fs.readFileSync("./data/config.json", "utf8")): createConfig();
 
-
 const checkHistory = async () => {
     try {
         let history = JSON.parse(fs.readFileSync("./data/history.json", "utf-8"));
 
         history = history.filter(user => {
-            if (!user || typeof user !== "object") return false; // Remove non-objects
-            if (user.time === undefined || user.time === null || isNaN(user.time)) return false; 
+            if (!user || typeof user !== "object") return false;
+            if (user.time === undefined || user.time === null || isNaN(user.time)) {
+                user.time = 0;
+            }
             return true;
         });
 
