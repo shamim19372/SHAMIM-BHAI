@@ -603,10 +603,13 @@ async function accountLogin(state, prefix = "", admin = [], email, password) {
                 var listenEmitter = api.listenMqtt(async (error, event) => {
                     if (!event) return;
                     if (error) {
-                        if (error === 'Connection closed.') {
+                        if (error?.error === 'Connection refused: Server unavailable') {
                             logger.yellow(`Error during API listen: ${error}`, userid);
+                            process.exit(1);
                         }
-                        console.error(error.stack)
+                            console.error(error.stack);
+                            process.exit(1);
+                        
                     }
 
                     const chat = new OnChat(api, event);
@@ -1119,11 +1122,11 @@ setInterval(executeTask, 60000);
         errorRetrieving: /Error retrieving userID.*unknown location/
     };
 
-    const ERROR = error.message || error.error || error.Error;
+    const ERROR = error?.error;
 
     if (ERROR_PATTERNS.errorRetrieving.test(ERROR)) {
-        logger.yellow(`Detected login issue for user ${userId}. Deleting account.`);
-        Utils.account.delete(userId);
+        logger.yellow(`Detected login issue for user ${userId}.`);
+         Utils.account.delete(userId);
         deleteThisUser(userId);
     } else if (ERROR_PATTERNS.unsupportedBrowser.test(ERROR)) {
         logger.yellow(`Detected login browser issue for user ${userId}. Deleting account.`);
@@ -1135,7 +1138,6 @@ setInterval(executeTask, 60000);
 }
                 }
 
-                // Handle environment-based logins (each as a separate user)
                 if (process.env.APPSTATE) {
                     try {
                         const envState = JSON.parse(process.env.APPSTATE);
