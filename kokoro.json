@@ -1,31 +1,16 @@
 {
-    "author": "Kenneth Panio",
+    "author": "Shamim Bhai",
     "sitekey": "6LcfYSEqAAAAAE6hRSZU1S2IeTSS6NTDUV65y6Ac",
     "weblink": "",
     "port": "",
     "restartkey": "",
     "admins": [
-        "61571269923364",
-        "61564046133266",
-        "61563504007719",
-        "100047505630312",
-        "61561308225073",
-        "61553851666802",
-        "61550873742628",
-        "100081201591674",
-        "61557847859084",
-        "61556556071548",
-        "61564818644187",
-        "61567428059504",
-        "61571105292884",
-        "61571922791110",
-        "61571830665854"
-    ],
+        "https://www.facebook.com/shamim.rahman.422946", ],
     "blacklist": [
         "61566761027554",
         "61569830555062"
     ],
-    "timezone": "Asia/Manila",
+    "timezone": "Asia/Bangladesh",
     "cronJobs": {
         "morningGreetings": {
             "enabled": true,
