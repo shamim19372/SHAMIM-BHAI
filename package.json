@@ -1,5 +1,5 @@
 {
-    "name": "fb-autobot",
+    "name": "Seductress",
     "version": "3.0.5",
     "description": "FB Autobot is a free tool that helps you automate Facebook tasks without coding skills. Build your own bot today!",
     "main": "index.js",
@@ -10,23 +10,12 @@
     "keywords": [
         "fb-bot",
         "fb-autobot",
-        "kokoro",
-        "kokoro-project",
-        "kokoro-ai"
+        "Shamim",
+        "Shamim-project",
+        "Shamim-ai"
     ],
     "author": [
-        "Kenneth Panio",
-        "Hajime Yuuta",
-        "Atomic-Zero",
-        "Cid Kagenou",
-        "Atomic Slash Studio",
-        "Hajime Atomyc",
-        "Pogi",
-        "Cid",
-        "Aizintel",
-        "Jr Busaco",
-        "Mark Hitsuraan",
-        "Mark devs"
+        "Shamim Re'hman",
     ],
     "license": "ISC",
     "dependencies": {
